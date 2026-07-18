@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from quant_research.data.base import FundamentalsDataSource, MacroDataSource, OHLCVDataSource
     from quant_research.signals.base import Signal
     from quant_research.strategy.base import Strategy
+    from quant_research.universe.base import UniverseProvider
 
 CACHE_BACKEND_REGISTRY: Registry["CacheBackend"] = Registry("cache_backend")
 DATA_SOURCE_REGISTRY: Registry["OHLCVDataSource"] = Registry("data_source")
@@ -20,3 +21,4 @@ MACRO_SOURCE_REGISTRY: Registry["MacroDataSource"] = Registry("macro_source")
 FUNDAMENTALS_SOURCE_REGISTRY: Registry["FundamentalsDataSource"] = Registry("fundamentals_source")
 SIGNAL_REGISTRY: Registry["Signal"] = Registry("signal")
 STRATEGY_REGISTRY: Registry["Strategy"] = Registry("strategy")
+UNIVERSE_PROVIDER_REGISTRY: Registry["UniverseProvider"] = Registry("universe_provider")

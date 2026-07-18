@@ -84,6 +84,26 @@ def test_signal_may_depend_on_fundamentals_alias() -> None:
     assert cfg.fundamentals.concepts == ["EarningsPerShareBasic"]
 
 
+def test_static_provider_requires_symbols() -> None:
+    bad = dict(MINIMAL)
+    bad["universe"] = {**MINIMAL["universe"], "symbols": [], "provider": "static"}
+    with pytest.raises(ValidationError, match="universe.symbols is required"):
+        PipelineConfig(**bad)
+
+
+def test_point_in_time_provider_does_not_require_symbols() -> None:
+    cfg_dict = dict(MINIMAL)
+    cfg_dict["universe"] = {
+        **MINIMAL["universe"],
+        "symbols": [],
+        "provider": "point_in_time",
+        "provider_params": {"membership_csv": "some/path.csv"},
+    }
+    cfg = PipelineConfig(**cfg_dict)
+    assert cfg.universe.provider == "point_in_time"
+    assert cfg.universe.provider_params == {"membership_csv": "some/path.csv"}
+
+
 def test_load_config_from_yaml(tmp_path) -> None:
     yaml_text = textwrap.dedent(
         """

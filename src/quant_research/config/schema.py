@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class UniverseConfig(BaseModel):
-    symbols: list[str]
+    symbols: list[str] = Field(default_factory=list)  # required for provider="static"; unused otherwise
     asset_class: Literal["equity", "etf", "fx", "crypto"] = "etf"
     start: date
     end: date
@@ -17,11 +17,19 @@ class UniverseConfig(BaseModel):
     primary_source: str
     fallback_sources: list[str] = Field(default_factory=list)
     price_field: Literal["adj_close", "close"] = "adj_close"
+    provider: str = "static"
+    provider_params: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _check_date_order(self) -> "UniverseConfig":
         if self.start >= self.end:
             raise ValueError(f"universe.start ({self.start}) must be before universe.end ({self.end})")
+        return self
+
+    @model_validator(mode="after")
+    def _check_static_provider_has_symbols(self) -> "UniverseConfig":
+        if self.provider == "static" and not self.symbols:
+            raise ValueError("universe.symbols is required when universe.provider is 'static'")
         return self
 
 

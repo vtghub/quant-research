@@ -13,6 +13,7 @@ from quant_research.core.registries import (
     MACRO_SOURCE_REGISTRY,
     SIGNAL_REGISTRY,
     STRATEGY_REGISTRY,
+    UNIVERSE_PROVIDER_REGISTRY,
 )
 from quant_research.pipeline.orchestrator import Pipeline  # side-effect: registers all built-ins
 
@@ -76,6 +77,7 @@ def list_registry() -> None:
     typer.echo("Macro sources:        " + ", ".join(MACRO_SOURCE_REGISTRY.list()))
     typer.echo("Fundamentals sources: " + ", ".join(FUNDAMENTALS_SOURCE_REGISTRY.list()))
     typer.echo("Cache backends:       " + ", ".join(CACHE_BACKEND_REGISTRY.list()))
+    typer.echo("Universe providers:   " + ", ".join(UNIVERSE_PROVIDER_REGISTRY.list()))
     typer.echo("Signals:              " + ", ".join(SIGNAL_REGISTRY.list()))
     typer.echo("Strategies:           " + ", ".join(STRATEGY_REGISTRY.list()))
 

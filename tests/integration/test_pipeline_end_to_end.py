@@ -269,3 +269,70 @@ def test_fundamentals_driven_value_signal_end_to_end(value_config) -> None:
     for value in result.backtest.metrics.values():
         assert np.isfinite(value)
     assert np.allclose(result.backtest.weights.abs().sum(axis=1).iloc[-5:], 1.0)
+
+
+def test_point_in_time_universe_excludes_non_members_from_trading(
+    tmp_path, registered_fake_source, synthetic_prices
+) -> None:
+    """DDD is removed from the universe partway through; EEE was never a member
+    at all. Both still have real price history in the fake source (a stock
+    doesn't stop trading just because it left the researched universe), so this
+    proves membership_mask -- not a narrower fetch -- is what keeps them out of
+    ranking/trading after/outside their membership window (the
+    survivorship-bias-free mechanism), while EEE's total absence from
+    all_symbols_ever() proves it's never even fetched."""
+    dates = synthetic_prices.index
+    removal_date = dates[len(dates) // 2]
+
+    membership_csv = tmp_path / "membership.csv"
+    membership_csv.write_text(
+        "symbol,start_date,end_date\n"
+        f"AAA,{dates[0].date()},\n"
+        f"BBB,{dates[0].date()},\n"
+        f"CCC,{dates[0].date()},\n"
+        f"DDD,{dates[0].date()},{removal_date.date()}\n"
+    )
+
+    config = PipelineConfig(
+        name="point_in_time_test",
+        universe={
+            "symbols": [],
+            "start": dates[0].date().isoformat(),
+            "end": dates[-1].date().isoformat(),
+            "primary_source": registered_fake_source,
+            "provider": "point_in_time",
+            "provider_params": {"membership_csv": str(membership_csv)},
+        },
+        cache={"root_dir": str(tmp_path / "cache")},
+        signals=[{"name": "momentum", "alias": "mom", "params": {"lookback": 20, "skip_recent": 5}}],
+        strategy={
+            "name": "rank_weighted_long_short",
+            "signals": ["mom"],
+            "params": {"top_frac": 0.4, "bottom_frac": 0.4},
+        },
+        report={"output_dir": str(tmp_path / "reports"), "formats": ["markdown"]},
+    )
+
+    pipeline = Pipeline(config)
+    result = pipeline.run_backtest()
+
+    assert "EEE" not in result.research.prices.columns  # never a member -> never fetched
+    assert "DDD" in result.research.prices.columns  # still fetched -- has real price history
+
+    # the signal itself is masked immediately after removal (the direct check --
+    # membership_mask is applied to signals, not to the shifted backtest weights)
+    mom = result.research.signals["mom"]
+    signal_after_removal = mom.loc[mom.index > pd.Timestamp(removal_date), "DDD"]
+    assert signal_after_removal.isna().all()
+
+    # BacktestResult.weights = weights.shift(1) (BacktestEngine's lookahead-
+    # protection shift), so a decision made ON removal_date (DDD's last eligible
+    # day) still realizes once on the following trading day -- skip that one
+    # flush-out day, then DDD must carry zero weight for the rest of the backtest.
+    weights = result.backtest.weights
+    dates_after_removal = weights.index[weights.index > pd.Timestamp(removal_date)]
+    after_flush_out = weights.loc[weights.index > dates_after_removal[1]]
+    assert (after_flush_out["DDD"] == 0.0).all()
+
+    # sanity: the still-active symbols do receive nonzero weight at some point
+    assert (weights[["AAA", "BBB", "CCC"]] != 0.0).any().any()
