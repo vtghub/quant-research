@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qra
+      POSTGRES_PASSWORD: qra
+      POSTGRES_DB: qra
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qra"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      QRA_DATABASE_URL: postgresql+psycopg://qra:qra@postgres:5432/qra
+      QRA_REDIS_URL: redis://redis:6379/0
+      QRA_CORS_ORIGINS: '["http://localhost:5173","http://localhost:8080"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - api_data:/app/api/api_data
+      - api_cache:/app/api/.cache
+
+  worker:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    command: celery -A quant_research_api.celery_app worker --loglevel=info
+    environment:
+      QRA_DATABASE_URL: postgresql+psycopg://qra:qra@postgres:5432/qra
+      QRA_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - api_data:/app/api/api_data
+      - api_cache:/app/api/.cache
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  api_data:
+  api_cache:

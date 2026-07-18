@@ -44,6 +44,18 @@ def test_information_coefficient_is_negative_one_for_inverted_series() -> None:
     assert np.allclose(ic.dropna(), -1.0)
 
 
+def test_decile_spread_returns_empty_frame_on_no_overlapping_dates() -> None:
+    # e.g. a data source returned nothing for the requested range -- prices
+    # (and therefore signal/forward-returns) end up completely empty. This
+    # must produce an empty-but-correctly-shaped frame, not crash trying to
+    # set_index("date") on a frame with zero rows and no columns at all.
+    empty = pd.DataFrame()
+    result = decile_spread_returns(empty, empty, n_quantiles=5)
+    assert result.empty
+    assert list(result.columns) == ["q1", "q2", "q3", "q4", "q5", "spread"]
+    assert result.index.name == "date"
+
+
 def test_decile_spread_positive_when_signal_predicts_return() -> None:
     dates = pd.bdate_range("2020-01-01", periods=5)
     # 10 symbols, signal exactly equals rank 0..9, fwd_ret also increasing with rank

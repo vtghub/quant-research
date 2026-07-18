@@ -17,4 +17,13 @@ htmlcov/
 reports/
 *.parquet
 
+# api service
+api/api_data/
+.env
+*.db
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
 .DS_Store
