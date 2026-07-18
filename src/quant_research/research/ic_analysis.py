@@ -24,6 +24,12 @@ def decile_spread_returns(signal: pd.DataFrame, fwd_ret: pd.DataFrame, n_quantil
     labels = [f"q{i + 1}" for i in range(n_quantiles)]
     rows: list[dict[str, float]] = []
 
+    if s.empty:
+        # No overlapping dates at all (e.g. the data source returned nothing
+        # for the requested range) -- an empty-but-correctly-shaped frame,
+        # not a crash on the .set_index("date") below.
+        return pd.DataFrame(columns=[*labels, "spread"]).rename_axis("date")
+
     for idx in s.index:
         row_signal = s.loc[idx]
         row_ret = r.loc[idx]
