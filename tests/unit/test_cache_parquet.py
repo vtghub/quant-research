@@ -7,6 +7,10 @@ from quant_research.cache.base import CacheKey
 from quant_research.cache.parquet_backend import ParquetCacheBackend
 from quant_research.core.registries import CACHE_BACKEND_REGISTRY
 
+# Generic get/put/invalidate/fetched_at correctness is covered once, for every
+# backend, in test_cache_backend_contract.py. This file only covers
+# parquet-specific concerns (registration, on-disk layout).
+
 
 @pytest.fixture
 def backend(tmp_path) -> ParquetCacheBackend:
@@ -31,50 +35,12 @@ def test_parquet_backend_is_registered() -> None:
     assert CACHE_BACKEND_REGISTRY.get("parquet") is ParquetCacheBackend
 
 
-def test_get_missing_key_returns_none(backend: ParquetCacheBackend) -> None:
-    key = CacheKey(source="yfinance", symbol="AAA", interval="1d")
-    assert backend.get(key) is None
-    assert not backend.exists(key)
-    assert backend.fetched_at(key) is None
-
-
-def test_put_then_get_roundtrip(backend: ParquetCacheBackend, sample_df: pd.DataFrame) -> None:
+def test_put_writes_one_parquet_file_per_key(backend: ParquetCacheBackend, tmp_path, sample_df: pd.DataFrame) -> None:
     key = CacheKey(source="yfinance", symbol="AAA", interval="1d")
     backend.put(key, sample_df)
 
-    assert backend.exists(key)
-    result = backend.get(key)
-    assert result is not None
-    pd.testing.assert_series_equal(result["close"], sample_df["close"], check_dtype=False)
-    assert backend.fetched_at(key) is not None
-
-
-def test_put_overwrites_previous_entry(backend: ParquetCacheBackend, sample_df: pd.DataFrame) -> None:
-    key = CacheKey(source="yfinance", symbol="AAA", interval="1d")
-    backend.put(key, sample_df)
-    smaller = sample_df.iloc[:2]
-    backend.put(key, smaller)
-    result = backend.get(key)
-    assert len(result) == 2
-
-
-def test_invalidate_removes_entry(backend: ParquetCacheBackend, sample_df: pd.DataFrame) -> None:
-    key = CacheKey(source="yfinance", symbol="AAA", interval="1d")
-    backend.put(key, sample_df)
-    backend.invalidate(key)
-    assert not backend.exists(key)
-    assert backend.get(key) is None
-
-
-def test_invalidate_missing_key_is_noop(backend: ParquetCacheBackend) -> None:
-    key = CacheKey(source="yfinance", symbol="ZZZ", interval="1d")
-    backend.invalidate(key)  # should not raise
-
-
-def test_different_symbols_and_adjustment_get_distinct_paths(
-    backend: ParquetCacheBackend, sample_df: pd.DataFrame
-) -> None:
-    raw_key = CacheKey(source="yfinance", symbol="AAA", interval="1d", adjusted=False)
-    adj_key = CacheKey(source="yfinance", symbol="AAA", interval="1d", adjusted=True)
-    backend.put(raw_key, sample_df)
-    assert not backend.exists(adj_key)
+    data_path, meta_path = backend._paths(key)
+    assert data_path.exists()
+    assert data_path.suffix == ".parquet"
+    assert meta_path.exists()
+    assert meta_path.name.endswith(".meta.json")

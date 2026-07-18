@@ -8,6 +8,7 @@ import importlib
 # Side-effect imports: importing these packages registers every built-in
 # implementation (data sources, cache backends, signals, strategies) into the
 # core registries before Pipeline ever resolves anything by name.
+import quant_research.cache.duckdb_backend  # noqa: F401
 import quant_research.cache.parquet_backend  # noqa: F401
 import quant_research.data.sources  # noqa: F401
 import quant_research.signals.library  # noqa: F401
