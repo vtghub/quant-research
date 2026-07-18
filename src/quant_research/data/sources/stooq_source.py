@@ -13,6 +13,16 @@ from quant_research.data.base import OHLCVDataSource, normalize_ohlcv
 
 STOOQ_URL = "https://stooq.com/q/d/l/"
 
+# Stooq's endpoint returns a misleading 404 (rather than a clear block/rate-limit
+# status) for requests carrying the default python-requests User-Agent -- send a
+# realistic browser UA, a simple and common fix for scraper-unfriendly endpoints.
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
 
 def _to_stooq_symbol(symbol: str) -> str:
     """Stooq's US-listed-ticker convention: plain tickers need a '.us' suffix
@@ -43,7 +53,7 @@ class StooqSource(OHLCVDataSource):
             "i": "d",
         }
         try:
-            response = requests.get(STOOQ_URL, params=params, timeout=30)
+            response = requests.get(STOOQ_URL, params=params, headers=DEFAULT_HEADERS, timeout=30)
             response.raise_for_status()
         except requests.RequestException as exc:
             raise DataSourceError(f"stooq fetch failed for {symbol}: {exc}") from exc
