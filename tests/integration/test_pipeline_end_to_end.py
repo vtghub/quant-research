@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-import pandas as pd
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 import pytest
 
 from quant_research.config.schema import PipelineConfig
@@ -47,6 +49,7 @@ def config(tmp_path, registered_fake_source):
         cache={"root_dir": str(tmp_path / "cache")},
         signals=[{"name": "momentum", "alias": "mom", "params": {"lookback": 60, "skip_recent": 5}}],
         strategy={"name": "rank_weighted_long_short", "signals": ["mom"], "params": {"top_frac": 0.4, "bottom_frac": 0.4}},
+        report={"output_dir": str(tmp_path / "reports"), "formats": ["markdown", "png"]},
     )
 
 
@@ -58,6 +61,8 @@ def test_run_research_wires_fetch_through_signals(config) -> None:
     assert set(research.prices.columns) == {"AAA", "BBB", "CCC", "DDD", "EEE"}
     assert "mom" in research.signals
     assert research.signals["mom"].shape == research.prices.shape
+    assert research.ic_result is not None  # ic_analysis defaults to enabled
+    assert 1 in research.ic_result.summaries
 
 
 def test_run_backtest_end_to_end_produces_sane_result(config) -> None:
@@ -70,6 +75,10 @@ def test_run_backtest_end_to_end_produces_sane_result(config) -> None:
         assert np.isfinite(value)
     # gross exposure should never exceed 1.0 (0.5 long + 0.5 short by construction)
     assert (result.backtest.weights.abs().sum(axis=1) <= 1.0 + 1e-9).all()
+
+    assert result.report_paths
+    for path_str in result.report_paths:
+        assert Path(path_str).exists()
 
 
 def test_cache_reused_across_pipeline_runs(config) -> None:

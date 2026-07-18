@@ -1,6 +1,6 @@
-"""Assembles the full pipeline (fetch -> cache -> signals -> strategy -> backtest)
-from a validated PipelineConfig, resolving every swappable piece through the
-registries by the names given in config."""
+"""Assembles the full pipeline (fetch -> cache -> signals -> IC analysis ->
+strategy -> backtest -> report) from a validated PipelineConfig, resolving every
+swappable piece through the registries by the names given in config."""
 from __future__ import annotations
 
 import importlib
@@ -12,13 +12,22 @@ import quant_research.cache.parquet_backend  # noqa: F401
 import quant_research.data.sources  # noqa: F401
 import quant_research.signals.library  # noqa: F401
 import quant_research.strategy.library  # noqa: F401
+import pandas as pd
+
 from quant_research.backtest.costs import BpsCostModel
 from quant_research.backtest.engine import BacktestEngine
 from quant_research.config.schema import PipelineConfig
 from quant_research.core.hooks import HookEvent, HookManager
-from quant_research.core.registries import CACHE_BACKEND_REGISTRY, DATA_SOURCE_REGISTRY, STRATEGY_REGISTRY
+from quant_research.core.registries import (
+    CACHE_BACKEND_REGISTRY,
+    DATA_SOURCE_REGISTRY,
+    MACRO_SOURCE_REGISTRY,
+    STRATEGY_REGISTRY,
+)
 from quant_research.data.access import DataAccessLayer
 from quant_research.pipeline.results import PipelineResult, ResearchResult
+from quant_research.report.tearsheet import generate_tearsheet
+from quant_research.research.ic_analysis import run_ic_analysis
 from quant_research.signals.pipeline import compute_signals
 
 
@@ -35,7 +44,7 @@ class Pipeline:
         )
         self.data_access = DataAccessLayer(self.cache, self.hooks)
 
-    def _load_prices(self):
+    def _load_prices(self) -> pd.DataFrame:
         universe = self.config.universe
         source = DATA_SOURCE_REGISTRY.create(universe.primary_source)
         long_df = self.data_access.get_ohlcv_long(
@@ -43,10 +52,42 @@ class Pipeline:
         )
         return DataAccessLayer.to_wide(long_df, price_field=universe.price_field)
 
+    def _load_macro_inputs(self, calendar_index: pd.DatetimeIndex) -> dict[str, pd.DataFrame]:
+        """Fetches each configured macro series and broadcasts it onto the price
+        calendar under alias 'macro_<series_id>', so any signal's depends_on can
+        reference it (see signals/library/macro_overlay.py)."""
+        if not self.config.macro.series_ids:
+            return {}
+
+        macro_source = MACRO_SOURCE_REGISTRY.create(self.config.macro.source)
+        macro_long = macro_source.fetch(
+            self.config.macro.series_ids, self.config.universe.start, self.config.universe.end
+        )
+
+        extra_inputs = {}
+        for series_id in self.config.macro.series_ids:
+            alias = f"macro_{series_id}"
+            extra_inputs[alias] = DataAccessLayer.broadcast_macro(
+                macro_long, series_id, calendar_index, self.config.universe.symbols
+            )
+        return extra_inputs
+
     def run_research(self) -> ResearchResult:
         prices = self._load_prices()
-        signals = compute_signals(prices, self.config.signals, self.hooks)
-        return ResearchResult(prices=prices, signals=signals)
+        extra_inputs = self._load_macro_inputs(prices.index)
+        signals = compute_signals(prices, self.config.signals, self.hooks, extra_inputs=extra_inputs)
+
+        ic_result = None
+        if self.config.ic_analysis.enabled and self.config.strategy.signals:
+            primary_alias = self.config.strategy.signals[0]
+            ic_result = run_ic_analysis(
+                prices,
+                signals[primary_alias],
+                self.config.ic_analysis.horizons,
+                self.config.ic_analysis.n_quantiles,
+            )
+
+        return ResearchResult(prices=prices, signals=signals, ic_result=ic_result)
 
     def run_backtest(self) -> PipelineResult:
         research = self.run_research()
@@ -66,4 +107,12 @@ class Pipeline:
 
         self.hooks.fire(HookEvent.AFTER_BACKTEST, result=bt_result)
 
-        return PipelineResult(research=research, backtest=bt_result)
+        self.hooks.fire(HookEvent.BEFORE_REPORT, config=self.config.report)
+        report_paths = generate_tearsheet(bt_result, research.ic_result, self.config)
+        self.hooks.fire(HookEvent.AFTER_REPORT, paths=report_paths)
+
+        return PipelineResult(
+            research=research,
+            backtest=bt_result,
+            report_paths=[str(p) for p in report_paths],
+        )

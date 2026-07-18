@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from quant_research.core.registries import STRATEGY_REGISTRY
@@ -27,8 +28,8 @@ class RankWeightedLongShort(Strategy):
         long_score = (ranks - 0.5).where(long_mask, 0.0)
         short_score = (ranks - 0.5).where(short_mask, 0.0)  # negative
 
-        long_gross = long_score.abs().sum(axis=1).replace(0.0, pd.NA)
-        short_gross = short_score.abs().sum(axis=1).replace(0.0, pd.NA)
+        long_gross = long_score.abs().sum(axis=1).replace(0.0, np.nan)
+        short_gross = short_score.abs().sum(axis=1).replace(0.0, np.nan)
 
         long_weights = long_score.div(long_gross, axis=0).fillna(0.0) * 0.5
         short_weights = short_score.div(short_gross, axis=0).fillna(0.0) * 0.5
