@@ -23,6 +23,7 @@ from quant_research.core.hooks import HookEvent, HookManager
 from quant_research.core.registries import (
     CACHE_BACKEND_REGISTRY,
     DATA_SOURCE_REGISTRY,
+    FUNDAMENTALS_SOURCE_REGISTRY,
     MACRO_SOURCE_REGISTRY,
     STRATEGY_REGISTRY,
 )
@@ -74,9 +75,32 @@ class Pipeline:
             )
         return extra_inputs
 
+    def _load_fundamentals_inputs(self, calendar_index: pd.DatetimeIndex) -> dict[str, pd.DataFrame]:
+        """Fetches each configured fundamentals concept for the universe (or an
+        explicit fundamentals.symbols override) and pivots it to a wide date x
+        symbol frame under alias 'fundamentals_<concept>', forward-filled onto
+        the price calendar (filings are quarterly at best)."""
+        if not self.config.fundamentals.concepts:
+            return {}
+
+        symbols = self.config.fundamentals.symbols or self.config.universe.symbols
+        fundamentals_source = FUNDAMENTALS_SOURCE_REGISTRY.create(self.config.fundamentals.source)
+        fundamentals_long = fundamentals_source.fetch(
+            symbols, self.config.fundamentals.concepts, self.config.universe.start, self.config.universe.end
+        )
+
+        extra_inputs = {}
+        for concept in self.config.fundamentals.concepts:
+            alias = f"fundamentals_{concept}"
+            extra_inputs[alias] = DataAccessLayer.fundamentals_to_wide(
+                fundamentals_long, concept, calendar_index, self.config.universe.symbols
+            )
+        return extra_inputs
+
     def run_research(self) -> ResearchResult:
         prices = self._load_prices()
         extra_inputs = self._load_macro_inputs(prices.index)
+        extra_inputs.update(self._load_fundamentals_inputs(prices.index))
         signals = compute_signals(prices, self.config.signals, self.hooks, extra_inputs=extra_inputs)
 
         ic_result = None

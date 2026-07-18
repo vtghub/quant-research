@@ -9,6 +9,7 @@ from quant_research.core.exceptions import QuantResearchError
 from quant_research.core.registries import (
     CACHE_BACKEND_REGISTRY,
     DATA_SOURCE_REGISTRY,
+    FUNDAMENTALS_SOURCE_REGISTRY,
     MACRO_SOURCE_REGISTRY,
     SIGNAL_REGISTRY,
     STRATEGY_REGISTRY,
@@ -71,11 +72,12 @@ def run(config: Path = typer.Argument(..., exists=True, help="Path to a pipeline
 @app.command(name="list-registry")
 def list_registry() -> None:
     """Dump every registered data source / signal / strategy, for config authors."""
-    typer.echo("Data sources:   " + ", ".join(DATA_SOURCE_REGISTRY.list()))
-    typer.echo("Macro sources:  " + ", ".join(MACRO_SOURCE_REGISTRY.list()))
-    typer.echo("Cache backends: " + ", ".join(CACHE_BACKEND_REGISTRY.list()))
-    typer.echo("Signals:        " + ", ".join(SIGNAL_REGISTRY.list()))
-    typer.echo("Strategies:     " + ", ".join(STRATEGY_REGISTRY.list()))
+    typer.echo("Data sources:         " + ", ".join(DATA_SOURCE_REGISTRY.list()))
+    typer.echo("Macro sources:        " + ", ".join(MACRO_SOURCE_REGISTRY.list()))
+    typer.echo("Fundamentals sources: " + ", ".join(FUNDAMENTALS_SOURCE_REGISTRY.list()))
+    typer.echo("Cache backends:       " + ", ".join(CACHE_BACKEND_REGISTRY.list()))
+    typer.echo("Signals:              " + ", ".join(SIGNAL_REGISTRY.list()))
+    typer.echo("Strategies:           " + ", ".join(STRATEGY_REGISTRY.list()))
 
 
 @app.command(name="validate-config")

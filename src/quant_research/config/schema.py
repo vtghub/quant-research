@@ -30,6 +30,12 @@ class MacroConfig(BaseModel):
     source: str = "fred"
 
 
+class FundamentalsConfig(BaseModel):
+    concepts: list[str] = Field(default_factory=list)
+    symbols: list[str] = Field(default_factory=list)  # empty -> use universe.symbols
+    source: str = "sec_edgar"
+
+
 class CacheConfig(BaseModel):
     backend: str = "parquet"
     root_dir: Path = Path(".cache/quant_research")
@@ -83,6 +89,7 @@ class PipelineConfig(BaseModel):
     name: str
     universe: UniverseConfig
     macro: MacroConfig = Field(default_factory=MacroConfig)
+    fundamentals: FundamentalsConfig = Field(default_factory=FundamentalsConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     signals: list[SignalConfig] = Field(default_factory=list)
     ic_analysis: ICAnalysisConfig = Field(default_factory=ICAnalysisConfig)
@@ -98,11 +105,14 @@ class PipelineConfig(BaseModel):
         if dup_aliases:
             raise ValueError(f"duplicate signal alias(es): {sorted(set(dup_aliases))}")
 
-        # Macro series are fetched and broadcast onto the price calendar at
-        # pipeline runtime (see Pipeline._load_macro_inputs), under alias
-        # "macro_<series_id>" -- not a configured Signal, but a valid depends_on target.
+        # Macro series and fundamentals concepts are fetched and reshaped onto the
+        # price calendar at pipeline runtime (see Pipeline._load_macro_inputs /
+        # _load_fundamentals_inputs), under aliases "macro_<series_id>" /
+        # "fundamentals_<concept>" -- not configured Signals, but valid
+        # depends_on targets.
         macro_aliases = {f"macro_{series_id}" for series_id in self.macro.series_ids}
-        depends_on_targets = known_aliases | macro_aliases
+        fundamentals_aliases = {f"fundamentals_{concept}" for concept in self.fundamentals.concepts}
+        depends_on_targets = known_aliases | macro_aliases | fundamentals_aliases
 
         for signal in self.signals:
             for dep in signal.depends_on:

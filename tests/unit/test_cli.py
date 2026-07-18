@@ -16,6 +16,10 @@ def test_list_registry_shows_builtins() -> None:
     result = runner.invoke(app, ["list-registry"])
     assert result.exit_code == 0
     assert "yfinance" in result.stdout
+    assert "alpha_vantage" in result.stdout
+    assert "sec_edgar" in result.stdout
+    assert "nasdaq_data_link" in result.stdout
+    assert "duckdb" in result.stdout
     assert "momentum" in result.stdout
     assert "rank_weighted_long_short" in result.stdout
     assert "parquet" in result.stdout

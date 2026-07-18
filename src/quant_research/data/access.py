@@ -90,3 +90,23 @@ class DataAccessLayer:
         series = series.sort_index()
         aligned = series.reindex(calendar_index, method="ffill")
         return pd.DataFrame({symbol: aligned for symbol in symbols}, index=calendar_index)
+
+    @staticmethod
+    def fundamentals_to_wide(
+        fundamentals_long_df: pd.DataFrame,
+        concept: str,
+        calendar_index: pd.DatetimeIndex,
+        symbols: Sequence[str],
+    ) -> pd.DataFrame:
+        """Pivot one fundamentals concept (e.g. 'EarningsPerShareBasic') to a wide
+        date x symbol frame -- the same shape a price panel has -- reindexed onto
+        the trading calendar with forward-fill (filings are quarterly at best, far
+        lower frequency than daily bars) and missing symbols filled with NaN so
+        the frame always has every universe column, consistent with how
+        Signal.compute treats warm-up NaN as "no data yet", not an error."""
+        subset = fundamentals_long_df.loc[fundamentals_long_df["concept"] == concept]
+        wide = subset.pivot_table(index="date", columns="symbol", values="value", aggfunc="last")
+        wide = wide.reindex(columns=symbols)
+        wide.index = pd.to_datetime(wide.index)
+        wide = wide.sort_index().reindex(calendar_index, method="ffill")
+        return wide

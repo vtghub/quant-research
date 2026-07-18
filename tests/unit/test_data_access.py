@@ -94,3 +94,40 @@ def test_broadcast_macro_forward_fills_onto_calendar_and_broadcasts_columns() ->
     assert (wide["AAA"] == wide["BBB"]).all()
     # forward-filled: value on 2020-02-15 should still be the 2020-02-01 print (2.0)
     assert wide.loc[pd.Timestamp("2020-02-17"), "AAA"] == 2.0
+
+
+def test_fundamentals_to_wide_pivots_per_symbol_and_forward_fills() -> None:
+    fundamentals_long = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01", "2020-04-01", "2020-01-01", "2020-04-01"]),
+            "symbol": ["AAA", "AAA", "BBB", "BBB"],
+            "concept": ["EarningsPerShareBasic"] * 4,
+            "value": [1.0, 1.5, 2.0, 2.5],
+        }
+    )
+    calendar = pd.bdate_range("2020-01-01", "2020-05-01")
+
+    wide = DataAccessLayer.fundamentals_to_wide(fundamentals_long, "EarningsPerShareBasic", calendar, ["AAA", "BBB"])
+
+    assert set(wide.columns) == {"AAA", "BBB"}
+    # forward-filled: mid-Feb should still reflect the Jan filing
+    assert wide.loc[pd.Timestamp("2020-02-14"), "AAA"] == 1.0
+    assert wide.loc[pd.Timestamp("2020-02-14"), "BBB"] == 2.0
+    # per-symbol, not broadcast: AAA and BBB differ (unlike broadcast_macro)
+    assert wide.loc[pd.Timestamp("2020-04-15"), "AAA"] != wide.loc[pd.Timestamp("2020-04-15"), "BBB"]
+
+
+def test_fundamentals_to_wide_missing_symbol_is_all_nan() -> None:
+    fundamentals_long = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01"]),
+            "symbol": ["AAA"],
+            "concept": ["EarningsPerShareBasic"],
+            "value": [1.0],
+        }
+    )
+    calendar = pd.bdate_range("2020-01-01", "2020-02-01")
+
+    wide = DataAccessLayer.fundamentals_to_wide(fundamentals_long, "EarningsPerShareBasic", calendar, ["AAA", "CCC"])
+
+    assert wide["CCC"].isna().all()

@@ -8,6 +8,7 @@ import pandas as pd
 
 OHLCV_COLUMNS = ["date", "symbol", "open", "high", "low", "close", "adj_close", "volume", "source"]
 MACRO_COLUMNS = ["date", "series_id", "value", "source"]
+FUNDAMENTALS_COLUMNS = ["date", "symbol", "concept", "value", "source"]
 
 
 def normalize_ohlcv(df: pd.DataFrame, source: str) -> pd.DataFrame:
@@ -34,6 +35,17 @@ def normalize_macro(df: pd.DataFrame, source: str) -> pd.DataFrame:
     return out
 
 
+def normalize_fundamentals(df: pd.DataFrame, source: str) -> pd.DataFrame:
+    out = df.copy()
+    out["date"] = pd.to_datetime(out["date"]).dt.tz_localize(None).dt.normalize()
+    out["source"] = source
+    missing = set(FUNDAMENTALS_COLUMNS) - set(out.columns)
+    if missing:
+        raise ValueError(f"normalize_fundamentals: missing columns {sorted(missing)}")
+    out = out[FUNDAMENTALS_COLUMNS].sort_values(["symbol", "concept", "date"]).reset_index(drop=True)
+    return out
+
+
 class OHLCVDataSource(ABC):
     name: ClassVar[str]
 
@@ -52,3 +64,12 @@ class MacroDataSource(ABC):
     @abstractmethod
     def fetch(self, series_ids: Sequence[str], start: date, end: date) -> pd.DataFrame:
         """Return long-format MACRO_COLUMNS data for the requested series/range."""
+
+
+class FundamentalsDataSource(ABC):
+    name: ClassVar[str]
+
+    @abstractmethod
+    def fetch(self, symbols: Sequence[str], concepts: Sequence[str], start: date, end: date) -> pd.DataFrame:
+        """Return long-format FUNDAMENTALS_COLUMNS data (one row per symbol x
+        concept x filing/period-end date) for the requested symbols/concepts/range."""

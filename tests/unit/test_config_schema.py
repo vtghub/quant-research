@@ -73,6 +73,17 @@ def test_signal_may_depend_on_macro_alias() -> None:
     assert cfg.macro.series_ids == ["FEDFUNDS"]
 
 
+def test_signal_may_depend_on_fundamentals_alias() -> None:
+    cfg_dict = dict(MINIMAL)
+    cfg_dict["fundamentals"] = {"concepts": ["EarningsPerShareBasic"], "source": "sec_edgar"}
+    cfg_dict["signals"] = [
+        {"name": "momentum", "alias": "mom"},
+        {"name": "composite", "alias": "value", "depends_on": ["fundamentals_EarningsPerShareBasic"]},
+    ]
+    cfg = PipelineConfig(**cfg_dict)
+    assert cfg.fundamentals.concepts == ["EarningsPerShareBasic"]
+
+
 def test_load_config_from_yaml(tmp_path) -> None:
     yaml_text = textwrap.dedent(
         """
