@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from quant_research.config.schema import PipelineConfig
-from quant_research.core.registries import DATA_SOURCE_REGISTRY, MACRO_SOURCE_REGISTRY
+from quant_research.core.registries import DATA_SOURCE_REGISTRY, FUNDAMENTALS_SOURCE_REGISTRY, MACRO_SOURCE_REGISTRY
 from quant_research.pipeline.orchestrator import Pipeline
 
 
@@ -193,3 +193,79 @@ def test_full_multi_signal_composite_pipeline_with_macro_overlay(multi_factor_co
     tearsheet_text = Path(tearsheet_path).read_text()
     assert "IC Summary" in tearsheet_text
     assert "Not investment advice" in tearsheet_text
+
+
+@pytest.fixture
+def registered_fake_fundamentals_source():
+    """A network-free FundamentalsDataSource double, registered under a
+    test-only name, so the value_proxy signal path can be exercised without
+    hitting SEC EDGAR. Gives each symbol a distinct, constant "EPS" so the
+    resulting earnings-yield ranking is deterministic."""
+
+    eps_by_symbol = {"AAA": 5.0, "BBB": 4.0, "CCC": 3.0, "DDD": 2.0, "EEE": 1.0}
+
+    class _FakeFundamentalsSource:
+        name = "fake_fundamentals_source"
+
+        def fetch(self, symbols, concepts, start, end) -> pd.DataFrame:
+            rows = [
+                {"date": pd.Timestamp(start), "symbol": symbol, "concept": concept, "value": eps_by_symbol[symbol]}
+                for symbol in symbols
+                for concept in concepts
+            ]
+            return pd.DataFrame(rows)
+
+    FUNDAMENTALS_SOURCE_REGISTRY.register("fake_fundamentals_source")(_FakeFundamentalsSource)
+    yield "fake_fundamentals_source"
+    FUNDAMENTALS_SOURCE_REGISTRY._items.pop("fake_fundamentals_source", None)
+
+
+@pytest.fixture
+def value_config(tmp_path, registered_fake_source, registered_fake_fundamentals_source):
+    """A value strategy driven entirely by SEC-EDGAR-shaped fundamentals data
+    (via value_proxy) traded with risk_parity sizing -- exercises the
+    fundamentals orchestrator wiring (_load_fundamentals_inputs) end to end,
+    which unit tests alone don't cover."""
+    return PipelineConfig(
+        name="value_integration_test",
+        universe={
+            "symbols": ["AAA", "BBB", "CCC", "DDD", "EEE"],
+            "start": "2020-02-01",
+            "end": "2021-06-01",
+            "primary_source": registered_fake_source,
+        },
+        fundamentals={"concepts": ["EarningsPerShareBasic"], "source": registered_fake_fundamentals_source},
+        cache={"root_dir": str(tmp_path / "cache")},
+        signals=[
+            {
+                "name": "value_proxy",
+                "alias": "earnings_yield",
+                "depends_on": ["fundamentals_EarningsPerShareBasic"],
+            },
+        ],
+        strategy={
+            "name": "risk_parity",
+            "signals": ["earnings_yield"],
+            "params": {"vol_lookback": 20, "require_positive_signal": False},
+        },
+        report={"output_dir": str(tmp_path / "reports"), "formats": ["markdown"]},
+    )
+
+
+def test_fundamentals_driven_value_signal_end_to_end(value_config) -> None:
+    pipeline = Pipeline(value_config)
+    result = pipeline.run_backtest()
+
+    earnings_yield = result.research.signals["earnings_yield"]
+    last_date = earnings_yield.dropna().index[-1]
+    # the wiring must actually compute EPS/price -- verify against the known
+    # constant EPS and the price the pipeline itself fetched for that date
+    # (checking a raw ratio, not a cross-symbol comparison confounded by the
+    # independently-random price levels the synthetic fixture generates)
+    expected_aaa = 5.0 / result.research.prices.loc[last_date, "AAA"]
+    assert earnings_yield.loc[last_date, "AAA"] == pytest.approx(expected_aaa)
+
+    assert not result.backtest.equity_curve.empty
+    for value in result.backtest.metrics.values():
+        assert np.isfinite(value)
+    assert np.allclose(result.backtest.weights.abs().sum(axis=1).iloc[-5:], 1.0)
