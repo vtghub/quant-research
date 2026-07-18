@@ -313,6 +313,27 @@ pass/fail history, not silently swallowed inside a research run.
   fine for research-scale universes/date-ranges, not tuned for very large
   universes or high-frequency backtests.
 
+## Multi-user API + frontend (`api/`, `frontend/`)
+
+The engine above is a library/CLI usable standalone. On top of it,
+`api/` is a multi-user FastAPI service (account signup/login via JWT, saved
+pipeline configs, and async research/backtest runs executed by Celery
+workers against PostgreSQL + Redis) and `frontend/` is a React + Vite SPA
+that drives it -- a config builder backed by the engine's own registry, a
+run dashboard with live status polling, and results rendering (equity
+curve, metrics, IC table, tearsheet artifact download).
+
+```bash
+docker compose up --build   # postgres + redis + api (:8000) + worker + frontend (:8080)
+```
+
+See `api/README.md` for the full architecture diagram, local development
+without Docker, configuration reference, and API surface -- including an
+honest note that the Docker Compose path was written but not buildable
+inside the sandboxed session that authored it (Docker Hub pulls blocked by
+the same network policy that blocks live data vendors), so it's worth a
+one-time verification in a normal environment before relying on it.
+
 ## Tooling note
 
 This codebase was built with a separate `mcp-native-core` local MCP server
