@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-research"
+version = "0.1.0"
+description = "Modular, hook-driven engine for quantitative trading research on free data"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+    "pandas>=2.1",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "statsmodels>=0.14",
+    "yfinance>=0.2.40",
+    "matplotlib>=3.8",
+    "pydantic>=2.5",
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "pyarrow>=14.0",
+]
+
+[project.optional-dependencies]
+fred = ["fredapi>=0.5"]
+duckdb = ["duckdb>=0.10"]
+dev = ["pytest>=8.0", "pytest-mock>=3.12", "pytest-cov>=5.0"]
+
+[project.scripts]
+quant-research = "quant_research.cli.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "network: hits a live data vendor (excluded by default)",
+]
+addopts = "-m 'not network'"

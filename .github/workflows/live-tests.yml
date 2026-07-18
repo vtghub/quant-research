@@ -1,0 +1,54 @@
+name: Live data smoke tests
+
+# This session's own dev environment has its outbound network egress blocked
+# for every data vendor host (yfinance, stooq, coingecko, fred, alpha_vantage,
+# nasdaq_data_link, sec_edgar all 403 from within it) -- GitHub's hosted
+# runners have independent, unrestricted network access, so this workflow is
+# where "does the engine actually talk to live vendors" gets verified for
+# real, on a schedule, without depending on any one dev session's policy.
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 13 * * 1" # weekly, Monday 13:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  live-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -e ".[dev,fred,duckdb]"
+
+      - name: Run live-vendor tests
+        # FRED_API_KEY / ALPHAVANTAGE_API_KEY / NASDAQ_DATA_LINK_API_KEY /
+        # SEC_EDGAR_USER_AGENT are optional repo secrets; each key-gated
+        # source's test skips itself (not fails) when its secret is unset --
+        # see tests/network/test_live_data_sources.py. yfinance/stooq/coingecko
+        # need no credentials and always run.
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+          NASDAQ_DATA_LINK_API_KEY: ${{ secrets.NASDAQ_DATA_LINK_API_KEY }}
+          SEC_EDGAR_USER_AGENT: ${{ secrets.SEC_EDGAR_USER_AGENT }}
+        run: pytest -m network -v
+
+      - name: Run live example backtest (produces a real tearsheet)
+        if: always()
+        run: quant-research backtest configs/example_live_smoke.yaml
+
+      - name: Upload tearsheet artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-smoke-tearsheet
+          path: reports/example_live_smoke/
+          if-no-files-found: warn
