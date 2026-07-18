@@ -98,11 +98,18 @@ class PipelineConfig(BaseModel):
         if dup_aliases:
             raise ValueError(f"duplicate signal alias(es): {sorted(set(dup_aliases))}")
 
+        # Macro series are fetched and broadcast onto the price calendar at
+        # pipeline runtime (see Pipeline._load_macro_inputs), under alias
+        # "macro_<series_id>" -- not a configured Signal, but a valid depends_on target.
+        macro_aliases = {f"macro_{series_id}" for series_id in self.macro.series_ids}
+        depends_on_targets = known_aliases | macro_aliases
+
         for signal in self.signals:
             for dep in signal.depends_on:
-                if dep not in known_aliases:
+                if dep not in depends_on_targets:
                     raise ValueError(
-                        f"signal '{signal.resolved_alias}' depends_on unknown signal alias '{dep}'"
+                        f"signal '{signal.resolved_alias}' depends_on unknown signal/macro alias '{dep}'. "
+                        f"Known: {sorted(depends_on_targets)}"
                     )
 
         for ref in self.strategy.signals:

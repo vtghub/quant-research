@@ -16,6 +16,7 @@ import pandas as pd
 
 from quant_research.backtest.costs import BpsCostModel
 from quant_research.backtest.engine import BacktestEngine
+from quant_research.backtest.rebalance import apply_rebalance_schedule
 from quant_research.config.schema import PipelineConfig
 from quant_research.core.hooks import HookEvent, HookManager
 from quant_research.core.registries import (
@@ -98,6 +99,7 @@ class Pipeline:
         primary_alias = self.config.strategy.signals[0]
         signal_df = research.signals[primary_alias]
         weights = strategy.generate_weights(signal_df, research.prices)
+        weights = apply_rebalance_schedule(weights, self.config.backtest.rebalance)
 
         engine = BacktestEngine(
             cost_model=BpsCostModel(self.config.backtest.cost_model.bps_per_trade),

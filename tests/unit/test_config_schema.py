@@ -62,6 +62,17 @@ def test_duplicate_alias_rejected() -> None:
         PipelineConfig(**bad)
 
 
+def test_signal_may_depend_on_macro_alias() -> None:
+    cfg_dict = dict(MINIMAL)
+    cfg_dict["macro"] = {"series_ids": ["FEDFUNDS"], "source": "fred"}
+    cfg_dict["signals"] = [
+        {"name": "momentum", "alias": "mom"},
+        {"name": "macro_overlay", "alias": "regime", "depends_on": ["macro_FEDFUNDS"]},
+    ]
+    cfg = PipelineConfig(**cfg_dict)
+    assert cfg.macro.series_ids == ["FEDFUNDS"]
+
+
 def test_load_config_from_yaml(tmp_path) -> None:
     yaml_text = textwrap.dedent(
         """
