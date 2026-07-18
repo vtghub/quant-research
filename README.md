@@ -288,6 +288,14 @@ pass/fail history, not silently swallowed inside a research run.
   and Alpha Vantage's (free tier, unadjusted) data isn't guaranteed to match
   yfinance's `adj_close` methodology; treat them as validation sources, not
   interchangeable primaries.
+- **Stooq blocks automated/datacenter traffic in practice**: confirmed via
+  `live-tests.yml` -- Stooq's CSV endpoint returns non-CSV responses (bot-check
+  pages, empty bodies) to requests from cloud/CI IP ranges (GitHub Actions
+  included) regardless of request headers. `tests/network/test_live_data_sources.py`
+  skips (rather than fails) when this happens, since it isn't a code defect and
+  can't be reliably worked around from CI; a real deployment fetching from a
+  residential/non-datacenter IP may see different results. Another reason
+  Stooq is cross-check/fallback only, never a primary.
 - **`adj_close` isn't immutable**: past dividend-adjusted prices can change
   retroactively as new dividends are declared. Both cache backends record a
   `fetched_at` timestamp per entry; call `CacheBackend.invalidate` (or delete
