@@ -1,0 +1,75 @@
+# Example: a multi-asset (ETFs + crypto), multi-factor (momentum + mean-reversion
+# + realized-vol + macro overlay, blended via `composite`) research pipeline.
+#
+# Run against live data (requires network + a free FRED API key, see README):
+#   export FRED_API_KEY=your_free_key
+#   quant-research research configs/example_multi_asset.yaml   # IC screening only
+#   quant-research backtest configs/example_multi_asset.yaml   # full pipeline + tearsheet
+#
+# NOTE: crypto (BTC-USD, ETH-USD) trades 24/7 while ETFs follow the exchange
+# calendar; this MVP reindexes everything onto the ETF trading calendar. See
+# the tearsheet disclaimer footer for this and other free-data limitations.
+
+name: example_multi_asset
+
+universe:
+  symbols: ["SPY", "QQQ", "TLT", "GLD", "BTC-USD", "ETH-USD"]
+  asset_class: etf # mixed universe; yfinance covers all of these tickers uniformly
+  start: "2019-01-01"
+  end: "2026-07-17"
+  interval: "1d"
+  primary_source: yfinance
+  fallback_sources: [stooq]
+  price_field: adj_close
+
+macro:
+  series_ids: ["FEDFUNDS"]
+  source: fred
+
+cache:
+  backend: parquet
+  root_dir: ".cache/quant_research"
+
+signals:
+  - name: momentum
+    alias: mom
+    params: { lookback: 126, skip_recent: 21 }
+  - name: zscore_meanrev
+    alias: meanrev
+    params: { window: 20 }
+  - name: realized_vol
+    alias: vol
+    params: { window: 20 }
+  - name: macro_overlay
+    alias: macro_regime
+    depends_on: [macro_FEDFUNDS]
+    params: { window: 252, direction: -1.0 } # rising Fed funds rate -> risk-off tilt
+  - name: composite
+    alias: multi_factor
+    depends_on: [mom, meanrev, vol, macro_regime]
+    params:
+      weights: { mom: 1.0, meanrev: 0.5, vol: -0.5, macro_regime: 0.5 }
+
+ic_analysis:
+  enabled: true
+  horizons: [1, 5, 21, 63]
+  n_quantiles: 5
+
+strategy:
+  name: rank_weighted_long_short
+  signals: [multi_factor]
+  params: { top_frac: 0.4, bottom_frac: 0.4 }
+
+backtest:
+  initial_capital: 1000000
+  cost_model: { name: bps, bps_per_trade: 5.0 }
+  rebalance: weekly
+
+report:
+  output_dir: reports/example_multi_asset
+  formats: [markdown, png]
+
+hooks:
+  modules:
+    - quant_research.hooks.builtin.logging_hooks
+    - quant_research.hooks.builtin.data_quality_hooks

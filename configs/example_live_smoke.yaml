@@ -1,0 +1,50 @@
+# Fast, credential-free live smoke test: three liquid ETFs via yfinance only
+# (no macro/fundamentals, no API keys), a single momentum signal, IC screening,
+# and a backtest -- small enough to run quickly in CI against real data.
+# See .github/workflows/live-tests.yml, which runs this on every trigger.
+#
+# Run it yourself (requires network access this session doesn't have):
+#   quant-research backtest configs/example_live_smoke.yaml
+
+name: example_live_smoke
+
+universe:
+  symbols: ["SPY", "QQQ", "TLT"]
+  asset_class: etf
+  start: "2023-01-01"
+  end: "2030-01-01" # open-ended on purpose: yfinance just returns data up to the real latest trading day
+  interval: "1d"
+  primary_source: yfinance
+  price_field: adj_close
+
+cache:
+  backend: parquet
+  root_dir: ".cache/quant_research"
+
+signals:
+  - name: momentum
+    alias: mom
+    params: { lookback: 60, skip_recent: 5 }
+
+ic_analysis:
+  enabled: true
+  horizons: [1, 5, 21]
+  n_quantiles: 3
+
+strategy:
+  name: rank_weighted_long_short
+  signals: [mom]
+  params: { top_frac: 0.4, bottom_frac: 0.4 }
+
+backtest:
+  initial_capital: 1000000
+  cost_model: { name: bps, bps_per_trade: 5.0 }
+  rebalance: weekly
+
+report:
+  output_dir: reports/example_live_smoke
+  formats: [markdown, png]
+
+hooks:
+  modules:
+    - quant_research.hooks.builtin.logging_hooks
