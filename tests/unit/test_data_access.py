@@ -76,3 +76,21 @@ def test_to_wide_pivots_on_price_field(access: DataAccessLayer, fake_data_source
 
     assert set(wide.columns) == {"AAA", "BBB"}
     assert wide.index.is_monotonic_increasing
+
+
+def test_broadcast_macro_forward_fills_onto_calendar_and_broadcasts_columns() -> None:
+    macro_long = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01", "2020-02-01", "2020-03-01"]),
+            "series_id": ["FEDFUNDS"] * 3,
+            "value": [1.0, 2.0, 3.0],
+        }
+    )
+    calendar = pd.bdate_range("2020-01-01", "2020-03-10")
+
+    wide = DataAccessLayer.broadcast_macro(macro_long, "FEDFUNDS", calendar, ["AAA", "BBB"])
+
+    assert set(wide.columns) == {"AAA", "BBB"}
+    assert (wide["AAA"] == wide["BBB"]).all()
+    # forward-filled: value on 2020-02-15 should still be the 2020-02-01 print (2.0)
+    assert wide.loc[pd.Timestamp("2020-02-17"), "AAA"] == 2.0

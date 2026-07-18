@@ -12,13 +12,16 @@ def compute_signals(
     prices: pd.DataFrame,
     configs: list[SignalConfig],
     hooks: HookManager | None = None,
+    extra_inputs: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Compute every configured signal, resolving depends_on in topological order
     so meta-signals (cross-sectional rank, composite, macro overlay) can consume
-    other signals' outputs by alias."""
+    other signals' outputs by alias. `extra_inputs` seeds additional named frames
+    (e.g. a macro series already broadcast onto the price calendar) that signals
+    can also depend_on without themselves being a configured Signal."""
     hooks = hooks or HookManager()
     by_alias = {cfg.resolved_alias: cfg for cfg in configs}
-    results: dict[str, pd.DataFrame] = {}
+    results: dict[str, pd.DataFrame] = dict(extra_inputs or {})
     resolving: set[str] = set()
 
     def resolve(alias: str) -> pd.DataFrame:

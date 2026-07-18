@@ -22,9 +22,12 @@ class BacktestEngine:
     """Vectorized pandas backtest. This class is the SOLE place in the codebase
     that shifts weights by one day before applying them to returns -- Strategy
     implementations must decide weights using only same-day-or-earlier information
-    and must NOT pre-shift; research/forward_returns.py encodes the same t -> t+1
-    convention independently for IC analysis (see tests/unit/test_lookahead_convention.py
-    which cross-checks the two never drift apart)."""
+    and must NOT pre-shift. A weight decided at date t-1 realizes exactly
+    price_t/price_{t-1}-1 at date t, i.e. this engine's daily_returns.loc[t]
+    equals research.forward_returns(...)[1].loc[t-1] -- research/forward_returns.py
+    encodes the same t -> t+1 no-lookahead convention independently for IC
+    analysis (see tests/unit/test_lookahead_convention.py, which cross-checks the
+    two never drift apart)."""
 
     def __init__(self, cost_model: CostModel, initial_capital: float = 1_000_000.0) -> None:
         self.cost_model = cost_model

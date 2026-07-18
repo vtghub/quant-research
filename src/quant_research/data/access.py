@@ -73,3 +73,20 @@ class DataAccessLayer:
         wide = long_df.pivot(index="date", columns="symbol", values=price_field)
         wide.index = pd.to_datetime(wide.index)
         return wide.sort_index()
+
+    @staticmethod
+    def broadcast_macro(
+        macro_long_df: pd.DataFrame,
+        series_id: str,
+        calendar_index: pd.DatetimeIndex,
+        symbols: Sequence[str],
+    ) -> pd.DataFrame:
+        """Reindex a single macro series onto the (equity/ETF) trading calendar with
+        forward-fill (macro releases are far lower frequency than daily bars), and
+        broadcast the resulting value across every symbol column -- the shape
+        signals expect. This is the MVP calendar-alignment simplification: no
+        attempt is made to model 24/7 vs exchange-calendar timing precisely."""
+        series = macro_long_df.loc[macro_long_df["series_id"] == series_id].set_index("date")["value"]
+        series = series.sort_index()
+        aligned = series.reindex(calendar_index, method="ffill")
+        return pd.DataFrame({symbol: aligned for symbol in symbols}, index=calendar_index)
