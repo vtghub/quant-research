@@ -240,7 +240,7 @@ one); or maintain it by hand for a small, deliberately-curated universe.
 
 ```bash
 pytest                 # everything runs offline against synthetic/mocked data
-pytest -m network       # (none currently marked; reserved for opt-in live-vendor tests)
+pytest -m network       # live-vendor tests -- needs real network access, see below
 ```
 
 200+ unit/integration tests, all deterministic and network-free -- including
@@ -249,6 +249,35 @@ a dedicated cross-check (`tests/unit/test_lookahead_convention.py`) proving
 convention can never silently drift apart, and an integration test proving a
 removed-mid-backtest symbol keeps its price history but is masked out of
 ranking/trading after its exit date under `provider: point_in_time`.
+
+## Live testing (CI)
+
+`pytest -m network` (`tests/network/`) hits real vendors: yfinance, Stooq,
+and CoinGecko unconditionally (no key needed), FRED/Alpha Vantage/Nasdaq Data
+Link/SEC EDGAR skip themselves individually if their credential env var isn't
+set, and a full pipeline smoke test runs `configs/example_live_smoke.yaml`
+(three ETFs via yfinance, no API keys required) end to end and checks a real
+tearsheet comes out the other side.
+
+These are excluded from the default `pytest` run and need real outbound
+network access to a handful of external hosts -- which a locked-down dev
+sandbox may not have. Two GitHub Actions workflows exist for this:
+
+- **`.github/workflows/tests.yml`**: the offline suite, on every push/PR.
+- **`.github/workflows/live-tests.yml`**: the live suite, on a weekly
+  schedule and via manual `workflow_dispatch`, using GitHub's own runners
+  (independent network access from any single dev session). It runs
+  `pytest -m network`, then `quant-research backtest
+  configs/example_live_smoke.yaml` to produce a real tearsheet, uploaded as a
+  build artifact. Set repo secrets `FRED_API_KEY` / `ALPHAVANTAGE_API_KEY` /
+  `NASDAQ_DATA_LINK_API_KEY` / `SEC_EDGAR_USER_AGENT` to also exercise those
+  sources; without them, only the credential-free vendors run and the rest
+  skip cleanly. Trigger it manually from the Actions tab, or wait for Monday.
+
+This is deliberately a CI concern rather than something the engine tries to
+self-verify at runtime: a live vendor going down or changing its API is
+exactly the kind of thing you want caught by a scheduled job with a visible
+pass/fail history, not silently swallowed inside a research run.
 
 ## Known limitations (also printed in every tearsheet)
 
