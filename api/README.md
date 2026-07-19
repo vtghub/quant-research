@@ -51,6 +51,8 @@ createuser qra --pwprompt   # password: qra (or set QRA_DATABASE_URL yourself)
 createdb qra -O qra
 createdb qra_test -O qra    # only if you'll run the test suite against real postgres
 
+cp api/.env.example api/.env  # optional -- override DB/Redis/JWT settings; defaults work as-is
+
 cd api
 alembic upgrade head         # creates users / saved_configs / runs tables
 
@@ -70,7 +72,8 @@ local dev.
 ## Configuration
 
 All settings are environment variables prefixed `QRA_` (see
-`quant_research_api/settings.py`), or a `.env` file in `api/`:
+`quant_research_api/settings.py`), or a `.env` file in `api/` (copy
+`api/.env.example`):
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -87,8 +90,14 @@ All settings are environment variables prefixed `QRA_` (see
 a Celery worker, and an nginx-served frontend build:
 
 ```bash
+cp .env.example .env   # optional -- override Postgres creds / JWT secret / vendor API keys
 docker compose up --build
 ```
+
+`docker-compose.yml` reads `.env` at the repo root for its `${VAR}` substitutions
+(Postgres user/password/db, `QRA_JWT_SECRET`, and the optional live-vendor API
+keys); every variable has a working default baked in, so `.env` is optional
+for a first run.
 
 API on `:8000`, frontend on `:8080`. **Note**: this was written following
 standard patterns but could not be built/run inside the session that
